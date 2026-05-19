@@ -1,0 +1,909 @@
+\documentclass[12pt]{article}
+
+% --- Packages ---
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{natbib}
+\usepackage{float}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\graphicspath{{figures/}}
+
+\linespread{1.6}
+
+\title{Occupational Skill Portability: A Gravity Model Approach}
+\author{Jacob Guzman\thanks{University of San Francisco. Email: \texttt{jguzman14@dons.usfca.edu}.}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+I construct a skill portability index for 525 U.S.\ occupations that measures the breadth of each occupation's outside options in skill space. A gravity model of bilateral occupational switching, estimated via PPML on CPS data (2020--2025) with O*NET skill profiles, geographic overlap, and Lightcast job postings as inputs, provides the underlying pair-level predictions. Among six candidate skill-distance measures, LASSO, which endogenously selects 117 of 202 O*NET dimensions, best predicts switching flows (pseudo-$R^2 = 0.478$). A fixed-exposure aggregation that strips origin-size contamination yields an index that is weakly but significantly associated with long-term unemployment across occupations ($p = 0.008$, $R^2 = 0.02$), though the small cell sizes in the CPS limit the strength of this validation. Comparing the LASSO-based index with a factor-analysis-based alternative reveals that credentialed occupations (registered nurses, electricians, hairdressers) are systematically rated more portable under factor analysis than under LASSO, consistent with licensing frictions suppressing observed mobility despite underlying skill compatibility.
+\end{abstract}
+
+%=============================================================================
+\section{Introduction}
+\label{sec:intro}
+%=============================================================================
+
+A central question in labor economics is whether the skills a worker accumulates in one occupation transfer to others. When an occupation contracts due to trade shocks, technological displacement, or sectoral reallocation, workers' outside options depend critically on whether their human capital has value elsewhere in the labor market. Despite decades of research on human capital specificity \citep{becker1964,lazear2009} and task-based models of occupational structure \citep{autor2003,acemoglu2011}, the profession lacks a widely accepted, empirically validated measure of occupation-level skill portability.
+
+Existing approaches to measuring skill overlap between occupations typically impose a single distance metric on a vector of skill descriptors, treating all dimensions as equally relevant to mobility \citep{poletaev2008,gathmann2010}. This assumption may be overly restrictive: some dimensions (e.g., broad cognitive abilities) are widely shared and plausibly drive transitions, while narrow knowledge categories used by only a few occupations may contribute little to observed mobility. An alternative approach infers skill relatedness from observed labor flows \citep{neffke2013}, but this conflates skill similarity with institutional and geographic frictions that shape mobility independently of skills.
+
+This paper proposes a middle path: let observed switching behavior reveal which skill dimensions constrain mobility, within a structural framework that controls for geographic overlap and labor demand. I estimate a gravity model of bilateral occupational switching, where the ``flow'' between two occupations depends on their skill distance, geographic co-location, origin size, and destination labor demand. The key methodological contribution is a comparative evaluation of six candidate skill-distance measures, three based on direct formulas (Euclidean, angular separation, factor analysis) and three based on machine-learning models (LASSO, Random Forest, XGBoost) trained to predict switching from per-dimension O*NET skill differences, with cross-validated out-of-fold predictions to prevent overfitting. The pair-level predictions are aggregated into a single portability score per occupation via a fixed-exposure specification that strips origin-size contamination.
+
+Three main findings emerge. First, LASSO-selected skill distances, estimated via Pseudo Poisson Maximum Likelihood (PPML), substantially outperform traditional metrics (pseudo-$R^2 = 0.478$ vs.\ $0.421$ for the best direct metric), confirming that endogenous dimension weighting captures mobility-relevant variation that equal-weighted measures miss. Second, the resulting portability index significantly predicts long-term unemployment across occupations ($p = 0.008$), with the relationship robust to controlling for AI exposure. Third, comparing the LASSO-based (revealed) and factor-analysis-based (structural) indices exposes a systematic divergence for licensed occupations: registered nurses, electricians, and hairdressers are rated far more portable under factor analysis, consistent with licensing frictions suppressing observed mobility despite underlying skill compatibility.
+
+The remainder of the paper is organized as follows. Section \ref{sec:literature} reviews the related literature. Section \ref{sec:data} describes the data sources. Section \ref{sec:strategy} presents the empirical strategy. Section \ref{sec:results} reports results. Section \ref{sec:discussion} discusses interpretation and limitations. Section \ref{sec:conclusion} concludes.
+
+%=============================================================================
+\section{Related Literature}
+\label{sec:literature}
+%=============================================================================
+
+This paper connects to four strands of the labor economics literature: human capital specificity and task-based frameworks, empirical measurement of occupational skill distance, occupational licensing and mobility frictions, and technology-driven labor reallocation.
+
+%-----------------------------------------------------------------------------
+\subsection{Human Capital Specificity and Task-Based Frameworks}
+%-----------------------------------------------------------------------------
+
+The theoretical foundation for skill portability traces to the distinction between general and specific human capital \citep{becker1964}. In Becker's framework, general skills transfer freely across employers while specific skills do not. \citet{lazear2009} refines this by arguing that specificity arises not from unusual component skills but from unusual \emph{combinations}: an occupation may require common skills (mathematics, communication, management) in a rare blend, making the bundle non-portable even though each ingredient is individually transferable. The portability index developed here captures exactly this distinction, measuring the transferability of the full skill bundle rather than any single component.
+
+The task-based approach, formalized by \citet{autor2003} and extended by \citet{acemoglu2011}, reframes occupations as bundles of tasks (routine vs.\ non-routine, cognitive vs.\ manual) rather than industries or education levels. This framework motivates the use of detailed O*NET descriptors, which characterize occupations along 202 task-relevant dimensions, as inputs to skill distance measurement.
+
+%-----------------------------------------------------------------------------
+\subsection{Measuring Occupational Skill Distance}
+%-----------------------------------------------------------------------------
+
+Several papers measure skill overlap between occupations and relate it to labor market outcomes. \citet{poletaev2008} construct skill mismatch measures from the Dictionary of Occupational Titles (DOT) and show that workers displaced into skill-dissimilar occupations suffer larger wage losses. Their measures use predetermined skill categories (cognitive, motor, people, physical), treating within-category variation as homogeneous. \citet{gathmann2010} measure task distance between occupations and show it predicts both switching propensities and wage changes upon switching. Their distance measure is based on a vector of task intensities, with all dimensions weighted equally.
+
+\citet{macaluso2023} introduces the concept of ``skill remoteness,'' measuring how far a displaced worker's skill bundle is from the nearest hiring opportunities. This is conceptually close to the portability index developed here, with an important methodological difference: Macaluso's measure is computed from a fixed distance metric, while the gravity model framework allows LASSO to endogenously select which skill dimensions predict observed transitions. \citet{neffke2013} take a revealed-preference approach, inferring skill relatedness between \emph{industries} from observed inter-industry labor flows rather than from occupational descriptors. The present paper applies a similar logic at the occupation level, using CPS switching flows as the outcome variable and O*NET descriptors as the explanatory variables.
+
+This paper's contribution relative to the skill distance literature is twofold. First, the comparative evaluation of six distance measures (three direct, three ML-based) provides evidence on which class of measures best predicts mobility, rather than imposing a single metric \emph{a priori}. Second, aggregating pair-level distances into an occupation-level index and validating it against a downstream labor market outcome (long-term unemployment) goes beyond predicting switching behavior to testing whether the measure captures economically meaningful variation.
+
+%-----------------------------------------------------------------------------
+\subsection{Occupational Licensing and Mobility Frictions}
+%-----------------------------------------------------------------------------
+
+Occupational licensing affects approximately 25\% of U.S.\ workers \citep{kleiner2013}. Licensing requirements raise the cost of occupational entry and have been shown to reduce cross-state mobility for licensed workers \citep{johnson2020}. The comparison of factor-analysis and LASSO portability indices in this paper provides a new angle on licensing frictions: the divergence between structural portability (based on latent skill overlap) and revealed portability (based on observed switching) is largest for licensed occupations, consistent with licensing suppressing transitions that underlying skill similarity would otherwise support.
+
+%-----------------------------------------------------------------------------
+\subsection{Technology and Labor Reallocation}
+%-----------------------------------------------------------------------------
+
+A growing literature studies how technological change reshapes occupational structure and forces workers to reallocate. \citet{autor2013} document how import competition from China displaced workers from manufacturing occupations, with adjustment costs concentrated in exposed commuting zones. \citet{cortes2018} estimate the aggregate costs of occupational mobility, showing that reallocation frictions are quantitatively important for understanding labor market adjustment to shocks. More recently, \citet{eloundou2023} assess occupations' exposure to large language models, finding that high-wage, cognitive occupations are most exposed.
+
+The portability index addresses a gap in this literature: while exposure measures identify which occupations are at risk, they do not capture whether displaced workers have viable outside options. A highly AI-exposed occupation whose workers have portable skills presents a different policy challenge than one whose workers are trapped. The AI extension in this paper tests whether portability and AI exposure interact in predicting unemployment, finding that the two channels are independent.
+
+%=============================================================================
+\section{Data}
+\label{sec:data}
+%=============================================================================
+
+The analysis combines five data sources: occupational switching counts from the Current Population Survey, skill profiles from O*NET, geographic employment distributions from the American Community Survey, job openings from Lightcast, and AI exposure scores from \citet{eloundou2023}. All occupation-level variables are defined at the Census 2018 four-digit occupation code level, which serves as the common identifier throughout the pipeline.
+
+%-----------------------------------------------------------------------------
+\subsection{Occupational Switching (CPS ASEC 2020--2025)}
+\label{sec:data_cps}
+%-----------------------------------------------------------------------------
+
+Bilateral switching counts come from the Annual Social and Economic Supplement (ASEC) of the Current Population Survey (CPS), accessed via IPUMS, for survey years 2020--2025. A respondent is classified as a \emph{switcher} if their current occupation code (\texttt{OCC}) differs from their prior-year occupation code (\texttt{OCCLY}). The sample is restricted to employed persons (EMPSTAT 10 or 12), ages 16--64, who are ASEC respondents (ASECFLAG $> 0$). Switching counts are raw person totals, unweighted, pooled across all six years to maximize sample size.
+
+This procedure identifies 525 occupations, 275,100 directed occupation pairs, of which 13,756 (5.0\%) have at least one observed switch, and 47,770 total switchers. The individual-level switching rate is 12.5\%, which is high relative to the $\sim$5\% benchmark in the literature \citep{kambourov2008}. The inflation likely reflects occupation coding error in the CPS: respondents report occupation titles that are then coded independently in consecutive surveys, so spurious switches arise from inconsistent coding rather than genuine job changes. This measurement error attenuates the relationship between skill distance and switching but does not bias the coefficient toward significance, making it a conservative concern for our main results.
+
+%-----------------------------------------------------------------------------
+\subsection{Skill Profiles (O*NET 30.1)}
+\label{sec:data_onet}
+%-----------------------------------------------------------------------------
+
+Skill profiles are drawn from the Occupational Information Network (O*NET) database, version 30.1. I use four descriptor files: Skills (35 dimensions), Abilities (52 dimensions), Knowledge (33 dimensions), and Work Activities (41 activities $\times$ 2 scales for level and importance, yielding 82 dimensions), for a total of 202 numeric dimensions per occupation. Each dimension is filtered to the Level scale (and Importance scale for Work Activities), excluding suppressed ratings (\texttt{Recommend Suppress = ``N''}). O*NET-SOC codes are truncated to six-digit SOC, values are averaged within each SOC, and all dimensions are min-max normalized to $[0,1]$.
+
+The resulting skill matrix (774 SOC codes $\times$ 202 dimensions) is mapped to Census 2018 occupation codes via the Census Bureau's 2018 occupation crosswalk. For each Census code, the crosswalk provides one or more SOC codes; when multiple SOCs map to a single Census code (typically for ``all other'' residual categories), the O*NET vectors are averaged. The match rate is 565 of 568 Census codes (99.5\%), with only three military codes unmatched. Approximately 93\% of mappings are exact one-to-one SOC matches; the remaining 7\% are residual categories resolved via wildcard or prefix matching.
+
+%-----------------------------------------------------------------------------
+\subsection{Geographic Distance (ACS 2021 + Dorn CZ Crosswalk)}
+\label{sec:data_geo}
+%-----------------------------------------------------------------------------
+
+Geographic distance is measured as the Duncan dissimilarity index of commuting-zone (CZ) employment shares between occupation pairs. The Duncan index is a standard measure of spatial segregation, bounded in $[0,1]$, where 0 indicates identical geographic distributions and 1 indicates complete spatial disjointness.
+
+Employment by occupation and commuting zone is computed from the American Community Survey (ACS) 2021 one-year file via IPUMS. The ACS provides person-level records with occupation codes and geographic identifiers (state, PUMA). PUMAs are mapped to commuting zones using the \citet{dorn2009} crosswalk, originally constructed for \citet{autor2013}.\footnote{The crosswalk uses 2010-vintage PUMA boundaries. ACS 2022 and later use 2020-vintage PUMAs, which are incompatible with this crosswalk. ACS 2021 is therefore the most recent compatible year. Geographic employment distributions evolve slowly, so 2021 is a reasonable proxy for the 2023 reference year specified in the research design.} Each person-CZ observation is weighted by the ACS person weight times the PUMA-to-CZ allocation factor. The resulting geographic distance matrix covers all 275,100 pairs in the analysis, with values ranging from 0.10 to 0.94 (mean = 0.49).
+
+Commuting zones, as defined by \citet{tolbert1996} and updated by \citet{dorn2009}, approximate local labor markets by grouping counties according to commuting patterns. They are preferred to states (too large to capture local labor markets) and to counties (too small and numerous for meaningful occupation-level employment counts).
+
+%-----------------------------------------------------------------------------
+\subsection{Job Openings (Lightcast 2023)}
+\label{sec:data_openings}
+%-----------------------------------------------------------------------------
+
+Destination labor demand is measured as each occupation's share of total job postings, computed from Lightcast (formerly Burning Glass Technologies) data for calendar year 2023. Total postings are summed by SOC 2021 five-digit code across months, then mapped to Census 2018 codes via the Census occupation crosswalk. The match rate is 655 of 657 SOC codes (99.7\%), covering 98.1\% of all 2023 postings, yielding openings shares for 520 Census occupation codes.
+
+%-----------------------------------------------------------------------------
+\subsection{AI Exposure (Eloundou et al.\ 2023)}
+\label{sec:data_ai}
+%-----------------------------------------------------------------------------
+
+AI exposure scores come from \citet{eloundou2023}, who assess each occupation's exposure to large language models (specifically GPT-4) using a combination of human annotation and model-based scoring. The ``beta'' scores, which capture the share of occupation tasks that could be significantly accelerated by LLM access, are mapped to Census 2018 codes. These scores are used as a control variable and interaction term in the LTU validation regressions.
+
+%-----------------------------------------------------------------------------
+\subsection{Summary Statistics}
+\label{sec:data_summary}
+%-----------------------------------------------------------------------------
+
+Table \ref{tab:summary} summarizes the key dimensions of the analysis dataset.
+
+\begin{table}[H]
+\centering
+\caption{Summary Statistics}
+\label{tab:summary}
+\begin{tabular}{lr}
+\toprule
+\textbf{Dimension} & \textbf{Value} \\
+\midrule
+Occupations & 525 \\
+Directed pairs & 275,100 \\
+Pairs with nonzero switches & 13,756 (5.0\%) \\
+Total switchers (pooled 2020--2025) & 47,770 \\
+Individual-level switching rate & 12.5\% \\
+O*NET skill dimensions & 202 \\
+Commuting zones & 741 \\
+Census--O*NET match rate & 565/568 (99.5\%) \\
+Lightcast--Census match rate & 655/657 (99.7\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure \ref{fig:switching_dist} illustrates the distributional features of the switching data that motivate the choice of estimator. Panel (a) shows that 95\% of directed occupation pairs have zero observed switches, creating a dominant extensive margin. Panel (b) shows that conditional on any switching, the distribution is heavily right-skewed: the median pair has just one observed switch, while a few high-flow pairs have over 100. Both features favor PPML over OLS.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig_switching_distribution.pdf}
+\caption{Distribution of bilateral switching counts across 275,100 directed occupation pairs. Panel (a): extensive margin. Panel (b): intensive margin, conditional on at least one observed switch.}
+\label{fig:switching_dist}
+\end{figure}
+
+%=============================================================================
+\section{Empirical Strategy}
+\label{sec:strategy}
+%=============================================================================
+
+The empirical strategy proceeds in two stages. The first stage constructs a validated skill portability index by estimating a gravity model of bilateral occupational switching, evaluating six candidate skill-distance measures, and aggregating pair-level predictions into a single score per occupation. The second stage tests whether this portability score predicts long-term unemployment across occupations.
+
+%-----------------------------------------------------------------------------
+\subsection{The Switching Model}
+\label{sec:strategy_model}
+%-----------------------------------------------------------------------------
+
+The baseline specification is a gravity model of labor mobility. Following the trade gravity literature \citep{santos2006}, the conditional mean of bilateral switching is modeled as a multiplicative function of pair-level covariates:
+\begin{equation}
+\label{eq:switching}
+\begin{aligned}
+E[\text{Switches}_{o,d} \mid X] = \exp\bigl(&\beta_0 + \beta_1 \, \text{SkillDistance}_{o,d} + \beta_2 \, \text{GeographicDistance}_{o,d} \\
+&+ \delta_1 \, \text{Switches}_{o,d^*} + \delta_2 \, \text{OpeningsShare}_d\bigr)
+\end{aligned}
+\end{equation}
+where $\text{Switches}_{o,d}$ is the raw count of CPS respondents who switched from occupation $o$ to occupation $d$ over the pooled 2020--2025 window; $\text{SkillDistance}_{o,d}$ is a measure of skill dissimilarity between the origin and destination (defined below); $\text{GeographicDistance}_{o,d}$ is the Duncan overlap index between the two occupations' CZ employment distributions; $\text{Switches}_{o,d^*} = \sum_{d'} \text{Switches}_{o,d'}$ is the total number of switchers out of origin $o$; and $\text{OpeningsShare}_d$ is the destination's share of national job postings.
+
+The controls $\delta_1$ and $\delta_2$ are essential. Without them, skill distance would appear to predict switching partly because it correlates with origin and destination size. A large occupation mechanically generates more bilateral flows to every destination; a high-demand destination absorbs more flows from every origin. The controls net out these mechanical effects, isolating the \emph{pair-specific excess switching} attributable to skill similarity ($\beta_1$) and geographic co-location ($\beta_2$).
+
+Equation (\ref{eq:switching}) is estimated by \textbf{Pseudo Poisson Maximum Likelihood (PPML)}, the preferred estimator, which is consistent for multiplicative models with heteroskedasticity and many zeros \citep{santos2006}. Both features characterize the switching data, where 95\% of pairs have zero observed switches. As a benchmark, I also estimate \textbf{OLS on $\log(1 + \text{Switches}_{o,d})$}, which imposes a log-linear specification:
+\begin{equation}
+\label{eq:switching_ols}
+\begin{aligned}
+\log(1 + \text{Switches}_{o,d}) = {} &\beta_0 + \beta_1 \, \text{SkillDistance}_{o,d} + \beta_2 \, \text{GeographicDistance}_{o,d} \\
+&+ \delta_1 \, \text{Switches}_{o,d^*} + \delta_2 \, \text{OpeningsShare}_d + \varepsilon_{o,d}
+\end{aligned}
+\end{equation}
+The $\log(1+y)$ transform is standard but distorts the extensive margin by compressing variation among zeros and positives. In the results, PPML substantially outperforms OLS ($R^2 = 0.478$ vs.\ $0.196$ for the best specification).
+
+%-----------------------------------------------------------------------------
+\subsection{Skill Distance Measures}
+\label{sec:strategy_skill}
+%-----------------------------------------------------------------------------
+
+Six candidate skill-distance measures are constructed from the 202-dimensional O*NET skill vectors:
+
+\paragraph{Direct metrics.} Three measures compute distance directly from the skill vectors:
+\begin{enumerate}
+    \item \textbf{Euclidean distance}: the $L_2$ norm of the difference vector between origin and destination skill profiles.
+    \item \textbf{Angular separation}: $\arccos\!\bigl(\text{cosine similarity}(s_o, s_d)\bigr)$, which captures the angle between skill vectors regardless of magnitude.
+    \item \textbf{Factor analysis}: Euclidean distance in a four-factor space obtained by fitting a factor model to all 565 occupation skill vectors. This compresses the 202 dimensions into four latent factors before computing distance.\footnote{The first four eigenvalues of the covariance matrix are 5.10, 1.77, 0.71, and 0.31, with a clear elbow after the second component; the fourth eigenvalue is roughly twice the fifth (0.31 vs.\ 0.18), providing a secondary break. Four factors explain 80.9\% of total variance (vs.\ 77.7\% at three and 82.8\% at five). To verify that the licensing-friction finding (Section \ref{sec:results_factor}) is not an artifact of this choice, I re-estimated the full pipeline at three and five factors. The Spearman rank correlation between the three- and four-factor portability indices is $\rho = 0.966$, and between four and five factors is $\rho = 0.980$. The key licensed occupations retain their qualitative pattern across all three specifications: electricians rank 115, 94, and 114 (vs.\ LASSO rank 398) and hairdressers rank 13, 8, and 7 (vs.\ LASSO rank 118) at three, four, and five factors respectively. Registered nurses shift from rank 34 (three factors) to 47 (four) to 213 (five), indicating some sensitivity for this occupation, though all three ranks remain well above the LASSO rank of 249.}
+\end{enumerate}
+
+\paragraph{ML-based metrics.} Three measures are \emph{trained} to predict bilateral switches from per-dimension skill differences:
+\begin{enumerate}
+    \setcounter{enumi}{3}
+    \item \textbf{LASSO}: LassoCV with five-fold cross-validation on 202 per-dimension absolute differences ($|s_o^{(k)} - s_d^{(k)}|$ for each dimension $k$). Out-of-fold predictions serve as the skill distance. LASSO selects 117 of 202 nonzero coefficients.
+    \item \textbf{Random Forest}: 100 trees, max depth 12, minimum 50 samples per leaf. Five-fold out-of-fold predictions.
+    \item \textbf{XGBoost}: 200 trees, learning rate 0.05, subsample 0.8. Five-fold out-of-fold predictions.
+\end{enumerate}
+
+For each ML model, the ``skill distance'' for a pair is that model's predicted switch count given only the O*NET skill differences as input. The full model (Equation \ref{eq:switching}) then tests how well this skill-based prediction explains actual switches after controlling for geographic distance, origin size, and destination openings. The use of cross-validated out-of-fold predictions prevents the ML-based distances from mechanically overfitting to the dependent variable.
+
+Running Equation (\ref{eq:switching}) separately for each of the six skill-distance variants under both OLS and PPML produces twelve specifications. The variant with the highest $R^2$ in the preferred PPML estimator is selected for index construction.
+
+%-----------------------------------------------------------------------------
+\subsection{Geographic Distance}
+\label{sec:strategy_geo}
+%-----------------------------------------------------------------------------
+
+Geographic distance between occupations $o$ and $d$ is the Duncan dissimilarity index:
+\begin{equation}
+\label{eq:duncan}
+\text{GeographicDistance}_{o,d} = \frac{1}{2} \sum_{c} \left| \text{EmpShare}_{o,c} - \text{EmpShare}_{d,c} \right|
+\end{equation}
+where $c$ indexes commuting zones and
+\begin{equation}
+\label{eq:empshare}
+\text{EmpShare}_{o,c} = \frac{\text{emp}_{o,c}}{\text{emp}_o}
+\end{equation}
+is occupation $o$'s share of employment in commuting zone $c$. The index equals zero when both occupations have identical geographic distributions (a worker in $o$ can access $d$ without relocating) and approaches one when they are spatially disjoint.
+
+%-----------------------------------------------------------------------------
+\subsection{Portability Index Construction}
+\label{sec:strategy_index}
+%-----------------------------------------------------------------------------
+
+The portability index aggregates pair-level model predictions into a single score per occupation. The baseline aggregation is:
+\begin{equation}
+\label{eq:portability}
+\text{Portability}_o = \sum_{d} \omega_d \cdot \hat{y}_{o,d}, \qquad \omega_d = \text{EmpShare}_d
+\end{equation}
+where $\hat{y}_{o,d}$ is the fitted value from Equation (\ref{eq:switching}) and $\text{EmpShare}_d$ is destination $d$'s share of national employment. This computes an employment-weighted average of predicted switches from origin $o$ to all destinations, giving higher weight to destinations that represent larger shares of the labor market.
+
+\paragraph{The origin-size contamination problem.} When $\delta_1$ is estimated freely, the fitted value $\hat{y}_{o,d}$ scales positively with $\text{Switches}_{o,d^*}$ (total switches out of origin $o$). Aggregating $\hat{y}$ across destinations therefore makes large origins mechanically score higher, regardless of their structural skill transferability. This produces counterintuitive rankings: cashiers and retail workers dominate the top, while software developers and registered nurses, occupations with arguably broad, transferable skills, cluster at the bottom.
+
+\paragraph{The fixed-$\delta_1$ exposure solution.} To isolate structural transferability, I re-estimate Equation (\ref{eq:switching}) with $\delta_1$ fixed to 1 by entering $\text{Switches}_{o,d^*}$ as a PPML exposure term:
+\begin{equation}
+\label{eq:exposure}
+\begin{aligned}
+E[\text{Switches}_{o,d} \mid X] = \text{Switches}_{o,d^*} \cdot \exp\bigl(&\beta_0 + \beta_1 \, \text{SkillDistance}_{o,d} \\
+&+ \beta_2 \, \text{GeographicDistance}_{o,d} + \delta_2 \, \text{OpeningsShare}_d\bigr)
+\end{aligned}
+\end{equation}
+The predicted \emph{rate per switcher},
+\begin{equation}
+\label{eq:rate}
+\begin{aligned}
+\hat{m}_{o,d} = \exp\bigl(&\beta_0 + \beta_1 \, \text{SkillDistance}_{o,d} \\
+&+ \beta_2 \, \text{GeographicDistance}_{o,d} + \delta_2 \, \text{OpeningsShare}_d\bigr)
+\end{aligned}
+\end{equation}
+depends only on skill distance, geographic distance, and destination openings, not on origin size. The portability rate is then:
+\begin{equation}
+\label{eq:portrate}
+\text{PortRate}_o = \sum_{d} \omega_d \cdot \hat{m}_{o,d}
+\end{equation}
+
+\paragraph{Rank normalization.} The raw $\text{PortRate}_o$ distribution is right-skewed (skewness = 1.59), so a few high-rate occupations would compress most occupations into a narrow band under min-max normalization. I therefore rank-normalize:
+\begin{equation}
+\label{eq:ranknorm}
+\text{Portability}_o = 1 - \frac{\text{rank}_o - 1}{N - 1}
+\end{equation}
+where $\text{rank}_o = 1$ for the most portable occupation and $N = 525$. The index is bounded in $[0,1]$ and interpretable as a percentile: a value of 0.75 means ``more portable than 75\% of occupations.''
+
+Rank normalization is preferred to two natural alternatives. Min-max normalization on the raw $\text{PortRate}_o$ values would compress the majority of occupations into a narrow band near zero because the distribution is right-skewed (skewness = 1.59); the top five occupations would absorb most of the $[0,1]$ range, rendering the index uninformative for the bulk of the distribution. A log transformation ($\log \text{PortRate}_o$) would preserve more variation but produces an unbounded index whose scale depends on the units of the predicted switching rate, complicating interpretation across specifications. Rank normalization sacrifices cardinal information about the magnitude of portability differences but yields an ordinal index with uniform marginal density, ensuring that the index distinguishes occupations equally well throughout the distribution.
+
+%-----------------------------------------------------------------------------
+\subsection{Validation: The Long-Term Unemployment Test}
+\label{sec:strategy_ltu}
+%-----------------------------------------------------------------------------
+
+The portability index is validated by testing whether it predicts long-term unemployment (LTU) across occupations:
+\begin{equation}
+\label{eq:ltu}
+\text{LTU}_o = \alpha_0 + \alpha_1 \, \text{EmpTrend}_o + \alpha_2 \, \text{Portability}_o + u_o
+\end{equation}
+where $\text{LTU}_o$ is the share of unemployed workers (with last occupation $o$) who have been unemployed for 26 weeks or more, and $\text{EmpTrend}_o$ is the OLS slope of $\log(\text{weighted employment})$ on year for occupation $o$. The employment trend controls for the possibility that declining occupations have higher LTU mechanically. The coefficient of interest is $\alpha_2$: a negative value indicates that workers in more portable occupations experience shorter unemployment spells, consistent with the hypothesis that transferable skills provide better outside options. Both $\text{EmpTrend}_o$ and $\text{Portability}_o$ are standardized (z-scored) before estimation.
+
+%-----------------------------------------------------------------------------
+\subsection{AI Exposure Extension}
+\label{sec:strategy_ai}
+%-----------------------------------------------------------------------------
+
+To test whether the portability--LTU relationship is confounded by or interacts with AI displacement risk, I estimate three additional specifications:
+\begin{align}
+\text{LTU}_o &= \alpha_0 + \alpha_1 \, \text{EmpTrend}_o + \alpha_2 \, \text{Portability}_o + \alpha_3 \, \text{AIExposure}_o + u_o \label{eq:ai_additive} \\
+\text{LTU}_o &= \alpha_0 + \alpha_1 \, \text{EmpTrend}_o + \alpha_2 \, \text{Portability}_o + \alpha_3 \, \text{AI}_o + \alpha_4 (\text{Portability}_o \times \text{AI}_o) + u_o \label{eq:ai_interaction}
+\end{align}
+and subsample regressions of Equation (\ref{eq:ltu}) on occupations above and below the median AI exposure score.
+
+%=============================================================================
+\section{Results}
+\label{sec:results}
+%=============================================================================
+
+%-----------------------------------------------------------------------------
+\subsection{Baseline Switching Model}
+\label{sec:results_baseline}
+%-----------------------------------------------------------------------------
+
+Table \ref{tab:baseline_r2} reports the $R^2$ from estimating Equation (\ref{eq:switching}) for each of the six skill-distance variants under both OLS and PPML. All specifications include geographic distance, total switches out, and openings share as controls.
+
+\begin{table}[H]
+\centering
+\caption{Baseline Model Fit: $R^2$ by Skill Distance Variant and Estimator}
+\label{tab:baseline_r2}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Skill Distance} & \textbf{OLS $R^2$} & \textbf{PPML $R^2$} & \textbf{$\hat{\beta}_1$ (PPML)} & \textbf{$p$-value} \\
+\midrule
+\textbf{LASSO}              & 0.109 & \textbf{0.478} & $+5.559$ & $<0.001$ \\
+Random Forest               & 0.196 & 0.431         & $+0.437$ & $<0.001$ \\
+Factor Analysis             & 0.099 & 0.421         & $-0.968$ & $<0.001$ \\
+Euclidean                   & 0.090 & 0.382         & $-0.555$ & $<0.001$ \\
+XGBoost                     & 0.192 & 0.371         & $+0.032$ & $<0.001$ \\
+Angular Separation          & 0.087 & 0.363         & $-2.544$ & $<0.001$ \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{0.5em}
+\footnotesize \textit{Notes:} $N = 275{,}100$ directed occupation pairs. OLS is estimated on $\log(1 + \text{Switches}_{o,d})$. PPML is Pseudo Poisson Maximum Likelihood. All specifications include geographic distance (Duncan index), total switches out of origin, and destination openings share. ML-based distances use cross-validated out-of-fold predictions. The sign of $\hat{\beta}_1$ is negative for direct metrics (more distance $\to$ fewer switches) and positive for ML metrics (higher predicted switches $\to$ more actual switches), by construction.
+\end{minipage}
+\end{table}
+
+Figure \ref{fig:model_comparison} visualizes these results.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig_model_comparison.pdf}
+\caption{Baseline model fit ($R^2$) by skill distance variant and estimator. PPML (dark) dominates OLS (light) across all variants. LASSO achieves the highest PPML $R^2$ (0.478).}
+\label{fig:model_comparison}
+\end{figure}
+
+Three patterns emerge. First, PPML dominates OLS across all variants, with the best PPML specification ($R^2 = 0.478$) more than doubling the best OLS specification ($R^2 = 0.196$). This is expected: 95\% of pairs have zero switches, making the count structure naturally suited to PPML \citep{santos2006}. Second, ML-based skill distances outperform direct metrics under PPML, with LASSO achieving the highest $R^2$. LASSO retains 117 of 202 O*NET dimensions, effectively learning which dimensions matter for switching rather than treating all 202 equally. Factor analysis, the best direct metric at $R^2 = 0.421$, suggests that a few broad skill clusters capture most of the mobility-relevant variation. Third, geographic distance contributes substantial explanatory power: adding the Duncan index to the LASSO/PPML specification increases $R^2$ by 9.8 percentage points, and the increment is even larger for factor analysis (+14.3 pp). Workers switch to occupations that exist where they already live.
+
+Figure \ref{fig:lasso_coefs} displays the 40 largest LASSO coefficients by magnitude, colored by O*NET descriptor category. The most influential dimensions span all four categories, and their signs and magnitudes are substantively interpretable.
+
+The largest negative coefficients, dimensions where between-occupation differences most strongly \emph{reduce} predicted switching, are dominated by broad cognitive and interpersonal dimensions: Science (Knowledge), Computers and Electronics (Knowledge), Assisting and Caring for Others (Work Activity), and Written Expression (Ability). These are dimensions that define major occupational clusters (e.g., healthcare, technical, office work); large differences on these dimensions signal cross-cluster transitions that workers rarely make. Their prominence confirms that LASSO recovers the intuitive result that ``core'' skill dimensions are the binding constraints on mobility.
+
+The largest positive coefficients, dimensions where differences \emph{increase} predicted switching, include Installation (Skill) and several manual-dexterity Work Activities. Positive coefficients indicate dimensions where origin-destination differences are associated with \emph{more} switching, potentially reflecting complementary specialization: workers in occupations with high installation skills may sort into destinations that emphasize different manual competencies, generating a pattern of within-trade mobility.
+
+Notably, many narrow Knowledge dimensions (e.g., Fine Arts, Theology, Foreign Language) receive zero coefficients, confirming the concern motivating the ML approach: these dimensions vary across occupations but do not predict mobility. LASSO's ability to zero out irrelevant dimensions while retaining 117 of 202 is the key advantage over Euclidean or angular distance, which weight all 202 dimensions equally.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig_lasso_coefficients.pdf}
+\caption{Top 40 LASSO coefficients by magnitude (117 nonzero of 202). Bars are colored by O*NET descriptor category. Negative coefficients indicate that larger between-occupation differences on that dimension reduce predicted switching.}
+\label{fig:lasso_coefs}
+\end{figure}
+
+All $\hat{\beta}_1$ coefficients are significant at $p < 0.001$ in every specification and every variant. The sign difference between direct and ML metrics is by construction: direct metrics measure dissimilarity (more distance $\rightarrow$ fewer switches, so $\hat{\beta}_1 < 0$), while ML metrics are predicted switches (higher prediction $\rightarrow$ more actual, so $\hat{\beta}_1 > 0$).
+
+Table \ref{tab:full_coefficients} reports the full set of PPML coefficient estimates for three representative variants: LASSO (best ML metric), factor analysis (best direct metric), and Euclidean (standard baseline). In addition to the skill distance coefficient $\hat{\beta}_1$ reported in Table \ref{tab:baseline_r2}, geographic distance strongly predicts switching in all three specifications, with the Duncan dissimilarity index coefficient ranging from $-8.1$ (LASSO) to $-9.8$ (Euclidean). The openings share coefficient $\hat{\delta}_2$ is positive and significant, confirming that workers switch into occupations with more vacancies. Standard errors are reported under both HC1-robust and two-way clustered inference (clustering on 525 origin $\times$ 525 destination occupations), following \citet{cameron2011}. Two-way clustered standard errors are roughly twice as large as HC1 standard errors on average, reflecting within-cluster correlation across shared origins and destinations, but all key coefficients remain highly significant.
+
+\begin{table}[H]
+\centering
+\caption{PPML Coefficient Estimates: Baseline Specification}
+\label{tab:full_coefficients}
+\begin{tabular}{lccc}
+\toprule
+ & (1) & (2) & (3) \\
+ & LASSO & Factor Analysis & Euclidean \\
+\midrule
+Skill distance ($\hat{\beta}_1$) & $5.5594^{***}$ & $-0.9677^{***}$ & $-0.5549^{***}$ \\
+ & (0.1148) & (0.0271) & (0.0311) \\
+ & [0.1871] & [0.0600] & [0.0718]\\[0.5em]
+Geographic distance ($\hat{\beta}_2$) & $-8.1006^{***}$ & $-9.7250^{***}$ & $-9.8286^{***}$ \\
+ & (0.2048) & (0.2333) & (0.2316) \\
+ & [0.3101] & [0.3496] & [0.3692]\\[0.5em]
+Total switches out ($\hat{\delta}_1$) & $0.001415^{***}$ & $0.001730^{***}$ & $0.001683^{***}$ \\
+ & (0.000072) & (0.000075) & (0.000075) \\
+ & [0.000134] & [0.000142] & [0.000129]\\[0.5em]
+Openings share ($\hat{\delta}_2$) & $22.104^{***}$ & $16.725^{**}$ & $15.746^{*}$ \\
+ & (2.5768) & (2.6102) & (2.4651) \\
+ & [5.2074] & [8.1007] & [8.2995]\\[0.5em]
+Constant & $-0.8427^{***}$ & $3.7034^{***}$ & $3.5566^{***}$ \\
+ & (0.0943) & (0.1069) & (0.1327) \\
+ & [0.1769] & [0.1434] & [0.1952] \\
+\midrule
+$N$ & 275,100 & 275,100 & 275,100 \\
+Pseudo-$R^2$ & 0.478 & 0.421 & 0.382 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{0.5em}
+\footnotesize \textit{Notes:} PPML estimates of Equation (\ref{eq:switching}). HC1-robust standard errors in parentheses; two-way clustered standard errors (origin $\times$ destination occupation) in brackets \citep{cameron2011}. Significance stars based on two-way clustered $p$-values: $^{***}p<0.01$, $^{**}p<0.05$, $^{*}p<0.10$. $N = 275{,}100$ directed occupation pairs, clustered on 525 origins and 525 destinations. The freely estimated $\hat{\delta}_1$ on total switches out ranges from 0.0014 to 0.0017 across variants, supporting the fixed-$\delta_1 = 1$ exposure specification in Table \ref{tab:fixed_coefficients}.
+\end{minipage}
+\end{table}
+
+%-----------------------------------------------------------------------------
+\subsection{Robustness Checks}
+\label{sec:results_robust}
+%-----------------------------------------------------------------------------
+
+Five robustness checks confirm the stability of the baseline result:
+
+\begin{enumerate}
+    \item \textbf{Fixed $\delta_1 = 1$}: Entering total switches out as an exposure term rather than a free regressor tests whether results survive when the model explains switching \emph{rates} rather than levels. Skill distance remains significant ($p < 0.001$) in all variants. OLS $R^2$ rises to 0.276, reflecting the tighter specification.
+
+    \item \textbf{Small-occupation removal}: Dropping occupations with fewer than 100 or 500 raw employment observations tests whether results are driven by noisy small-cell pairs. $\hat{\beta}_1$ is stable across thresholds. OLS $R^2$ increases slightly (the remaining pairs are better measured), while PPML $R^2$ decreases (fewer zero-pairs to explain).
+
+    \item \textbf{Two-part model}: Separating the extensive margin (logit: does any switching occur?) from the intensive margin (OLS on positives: conditional on switching, how many?) shows that skill and geographic distance strongly predict \emph{whether} any switching occurs (logit pseudo-$R^2 = 0.222$ for factor analysis) but have less power over conditional magnitude ($R^2 = 0.127$), where idiosyncratic factors dominate.
+
+    \item \textbf{Year fixed effects}: Estimating Equation (\ref{eq:switching}) on year-level switching data with year dummies absorbs COVID-era reshuffling and time trends. The pattern is identical: LASSO/PPML remains best ($R^2 = 0.411$), and skill distance is consistently significant.
+
+    \item \textbf{Two-way clustered standard errors}: The 275,100 directed pairs share 525 origins and 525 destinations, inducing within-cluster correlation that HC1-robust standard errors ignore. Two-way clustering on origin $\times$ destination occupation \citep{cameron2011} roughly doubles the standard errors (mean ratio 2.05), but all $\hat{\beta}_1$ coefficients remain significant at $p < 0.01$ across all variants and specifications (Tables \ref{tab:full_coefficients} and \ref{tab:fixed_coefficients}).
+\end{enumerate}
+
+%-----------------------------------------------------------------------------
+\subsection{Fixed-$\delta_1$ $R^2$ Comparison}
+\label{sec:results_fixed}
+%-----------------------------------------------------------------------------
+
+Table \ref{tab:fixed_r2} reports the pseudo-$R^2$ under the fixed-$\delta_1$ exposure constraint for all six variants. This specification is used for index construction.
+
+\begin{table}[H]
+\centering
+\caption{Fixed-$\delta_1$ PPML: $R^2$ Comparison Across Skill Distance Variants}
+\label{tab:fixed_r2}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Skill Distance} & \textbf{$R^2$ (fixed $\delta_1$)} & \textbf{$R^2$ (baseline)} & \textbf{$\hat{\beta}_1$} & \textbf{$p$-value} \\
+\midrule
+\textbf{LASSO}              & \textbf{0.326} & 0.478 & $+5.398$ & $<0.001$ \\
+Random Forest               & 0.276          & 0.431 & $+0.445$ & $<0.001$ \\
+Factor Analysis             & 0.265          & 0.421 & $-0.979$ & $<0.001$ \\
+Euclidean                   & 0.212          & 0.382 & $-0.561$ & $<0.001$ \\
+XGBoost                     & 0.201          & 0.371 & $+0.032$ & $<0.001$ \\
+Angular Separation          & 0.188          & 0.363 & $-2.524$ & $<0.001$ \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{0.5em}
+\footnotesize \textit{Notes:} $N = 275{,}100$. Fixed $\delta_1$ is implemented by entering total switches out of origin as a PPML exposure term. The ranking of variants is preserved relative to the baseline: LASSO $>$ Random Forest $>$ Factor Analysis $>$ Euclidean $>$ XGBoost $>$ Angular Separation. $R^2$ declines uniformly because the exposure constraint is strictly more restrictive.
+\end{minipage}
+\end{table}
+
+LASSO remains the best specification ($R^2 = 0.326$), preserving the baseline ranking. The $R^2$ decline relative to the baseline is uniform across variants, reflecting the cost of the exposure constraint. The key result is that the \emph{relative} ranking of variants is unchanged, confirming that the choice of preferred metric is robust to the exposure specification.
+
+Table \ref{tab:fixed_coefficients} reports the full coefficient estimates under the fixed-$\delta_1$ exposure specification. The $\hat{\beta}_1$ estimates are stable relative to the baseline (Table \ref{tab:full_coefficients}): LASSO moves from $+5.559$ to $+5.398$, factor analysis from $-0.968$ to $-0.979$, and Euclidean from $-0.555$ to $-0.561$. Geographic distance coefficients attenuate in magnitude under the exposure specification (e.g., from $-8.1$ to $-4.5$ for LASSO), consistent with the exposure term absorbing some of the origin-level variation previously captured by geographic proximity. All coefficients remain significant under two-way clustered inference.
+
+\begin{table}[H]
+\centering
+\caption{PPML Coefficient Estimates: Fixed $\delta_1 = 1$ Specification}
+\label{tab:fixed_coefficients}
+\begin{tabular}{lccc}
+\toprule
+ & (1) & (2) & (3) \\
+ & LASSO & Factor Analysis & Euclidean \\
+\midrule
+Skill distance ($\hat{\beta}_1$) & $5.3984^{***}$ & $-0.9791^{***}$ & $-0.5607^{***}$ \\
+ & (0.1144) & (0.0273) & (0.0332) \\
+ & [0.2045] & [0.0586] & [0.0744]\\[0.5em]
+Geographic distance ($\hat{\beta}_2$) & $-4.4672^{***}$ & $-6.3602^{***}$ & $-6.4655^{***}$ \\
+ & (0.1803) & (0.2109) & (0.2097) \\
+ & [0.2959] & [0.3060] & [0.3236]\\[0.5em]
+Openings share ($\hat{\delta}_2$) & $36.295^{***}$ & $26.671^{***}$ & $25.338^{**}$ \\
+ & (2.4653) & (2.6389) & (2.3805) \\
+ & [6.7898] & [9.5772] & [9.8506]\\[0.5em]
+Constant & $-6.7741^{***}$ & $-2.0571^{***}$ & $-2.2354^{***}$ \\
+ & (0.0863) & (0.0956) & (0.1285) \\
+ & [0.1559] & [0.1305] & [0.1976] \\
+\midrule
+$N$ & 275,100 & 275,100 & 275,100 \\
+Pseudo-$R^2$ & 0.326 & 0.265 & 0.212 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{0.5em}
+\footnotesize \textit{Notes:} PPML estimates with $\delta_1 = 1$ imposed via exposure term (total switches out of origin). HC1-robust standard errors in parentheses; two-way clustered standard errors in brackets \citep{cameron2011}. Significance stars based on two-way clustered $p$-values: $^{***}p<0.01$, $^{**}p<0.05$, $^{*}p<0.10$.
+\end{minipage}
+\end{table}
+
+%-----------------------------------------------------------------------------
+\subsection{Portability Index Rankings}
+\label{sec:results_rankings}
+%-----------------------------------------------------------------------------
+
+Table \ref{tab:top_bottom} reports the 20 most and 20 least portable occupations under the fixed-$\delta_1$ LASSO/PPML specification with rank normalization.
+
+\begin{table}[H]
+\centering
+\caption{Top 20 and Bottom 20 Occupations by Portability Index (LASSO, Fixed $\delta_1$)}
+\label{tab:top_bottom}
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\linespread{1.0}\selectfont
+\begin{tabular}{rlcc}
+\toprule
+\textbf{Rank} & \textbf{Occupation} & \textbf{Index} & \textbf{PortRate} \\
+\midrule
+\multicolumn{4}{l}{\textit{Panel A: Most Portable}} \\
+1  & Receptionists and information clerks          & 1.000 & 0.01251 \\
+2  & Office clerks, general                        & 0.998 & 0.01213 \\
+3  & Cashiers                                      & 0.996 & 0.01099 \\
+4  & Laborers and freight, stock movers, hand       & 0.994 & 0.01075 \\
+5  & Couriers and messengers                       & 0.992 & 0.00977 \\
+6  & Stockers and order fillers                    & 0.990 & 0.00961 \\
+7  & Retail salespersons                           & 0.989 & 0.00944 \\
+8  & First-line supervisors of non-retail sales    & 0.987 & 0.00929 \\
+9  & Customer service representatives              & 0.985 & 0.00927 \\
+10 & Sales reps., wholesale and manufacturing      & 0.983 & 0.00901 \\
+11 & Data entry keyers                             & 0.981 & 0.00869 \\
+12 & Food service managers                         & 0.979 & 0.00845 \\
+13 & Cooks                                         & 0.977 & 0.00833 \\
+14 & Managers, all other                           & 0.975 & 0.00813 \\
+15 & Waiters and waitresses                        & 0.973 & 0.00787 \\
+16 & Secondary school teachers                     & 0.971 & 0.00785 \\
+17 & Physical therapists                           & 0.969 & 0.00771 \\
+18 & First-line supervisors, office/admin support  & 0.968 & 0.00764 \\
+19 & Secretaries and administrative assistants     & 0.966 & 0.00758 \\
+20 & Billing and posting clerks                    & 0.964 & 0.00739 \\
+\midrule
+\multicolumn{4}{l}{\textit{Panel B: Least Portable}} \\
+506 & Engine and other machine assemblers          & 0.036 & 0.00026 \\
+507 & Aircraft pilots and flight engineers         & 0.034 & 0.00026 \\
+508 & Tire builders                                & 0.032 & 0.00024 \\
+509 & Graders and sorters, agricultural products   & 0.031 & 0.00024 \\
+510 & Furnace, kiln, oven, drier operators         & 0.029 & 0.00021 \\
+511 & Bioengineers and biomedical engineers        & 0.027 & 0.00021 \\
+512 & Derrick, rotary drill, service unit operators & 0.025 & 0.00020 \\
+513 & Fishing and hunting workers                  & 0.023 & 0.00020 \\
+514 & Proofreaders and copy markers                & 0.021 & 0.00020 \\
+515 & Ship and boat captains and operators         & 0.019 & 0.00020 \\
+516 & Millwrights                                  & 0.017 & 0.00020 \\
+517 & Riggers                                      & 0.015 & 0.00019 \\
+518 & Woodworking machine setters, operators       & 0.013 & 0.00018 \\
+519 & Astronomers and physicists                   & 0.011 & 0.00018 \\
+520 & Avionics technicians                         & 0.010 & 0.00017 \\
+521 & Petroleum engineers                          & 0.008 & 0.00016 \\
+522 & Actors                                       & 0.006 & 0.00016 \\
+523 & Dancers and choreographers                   & 0.004 & 0.00015 \\
+524 & Explosives workers, ordnance handling experts & 0.002 & 0.00015 \\
+525 & Marine engineers and naval architects        & 0.000 & 0.00011 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{0.5em}
+\footnotesize \textit{Notes:} Index is rank-normalized to $[0,1]$. PortRate is the employment-share-weighted predicted switching rate per switcher from the fixed-$\delta_1$ PPML model.
+\end{minipage}
+\end{table}
+
+The top of the distribution is dominated by clerical, retail, food service, and general management occupations whose skill profiles overlap with many large destination sectors. The bottom is populated by highly specialized occupations with narrow skill profiles: petroleum engineers, marine engineers, avionics technicians, and similar niche occupations whose human capital does not generalize.
+
+Figure \ref{fig:industry} shows the distribution of portability ranks across broad industry groups, confirming the expected pattern: Education and Business/Office occupations cluster at high portability, while STEM, Skilled Trades, and Production/Transport occupations are concentrated at lower portability ranks with wider dispersion.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig_portability_by_industry.pdf}
+\caption{Portability rank by industry group. Lower rank = more portable. Box plots show median, interquartile range, and individual occupations (dots). Education and Business/Office occupations are the most portable; STEM and Production/Transport are the least.}
+\label{fig:industry}
+\end{figure}
+
+Table \ref{tab:notable} reports selected occupations of substantive interest, comparing the fixed-$\delta_1$ index with the earlier per-worker baseline.
+
+\begin{table}[H]
+\centering
+\caption{Notable Occupations: Fixed-$\delta_1$ Index vs.\ Per-Worker Baseline}
+\label{tab:notable}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Occupation} & \textbf{Index} & \textbf{Rank (of 525)} & \textbf{Per-Worker Rank} \\
+\midrule
+Software developers          & 0.490 & 268 & 519 \\
+Registered nurses             & 0.527 & 249 & 516 \\
+Electricians                  & 0.242 & 398 & 521 \\
+Mechanical engineers          & 0.149 & 447 & 518 \\
+Aerospace engineers           & 0.048 & 500 & 524 \\
+Aircraft pilots               & 0.034 & 507 & 522 \\
+Petroleum engineers           & 0.008 & 521 & 523 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{0.5em}
+\footnotesize \textit{Notes:} Per-worker rank is based on the per-million-worker portability rate from the free-$\delta_1$ specification. The fixed-$\delta_1$ index substantially improves the ranking of software developers (519 $\to$ 268) and registered nurses (516 $\to$ 249) by stripping origin-size contamination.
+\end{minipage}
+\end{table}
+
+Software developers and registered nurses move from the very bottom of the per-worker ranking ($\sim$519 and $\sim$516 of 525) to near the median of the fixed-$\delta_1$ index (268 and 249). The fixed-$\delta_1$ specification recognizes that these occupations' skill profiles are structurally close to many large destinations, even though observed switching volume is low, either because workers in these occupations are well-compensated (reducing voluntary mobility) or because institutional barriers suppress transitions. Aerospace engineers, pilots, and petroleum engineers remain near the bottom in both measures, consistent with genuinely narrow skill profiles.
+
+%-----------------------------------------------------------------------------
+\subsection{Factor Analysis vs.\ LASSO: Licensing Frictions}
+\label{sec:results_factor}
+%-----------------------------------------------------------------------------
+
+Both the factor-analysis and LASSO indices are constructed identically (fixed $\delta_1 = 1$, employment-share-weighted rate, rank-normalized), with the only difference being the underlying skill-distance measure. The Spearman rank correlation between the two indices is $\rho = 0.890$, indicating broad agreement. However, the indices diverge sharply for specific occupations, and the pattern of divergence is substantively informative.
+
+Table \ref{tab:factor_lasso} reports occupations with the largest rank differences.
+
+\begin{table}[H]
+\centering
+\caption{Factor Analysis vs.\ LASSO Portability: Notable Rank Differences}
+\label{tab:factor_lasso}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Occupation} & \textbf{Factor Rank} & \textbf{LASSO Rank} & \textbf{$\Delta$ Rank} & \textbf{Licensed?} \\
+\midrule
+Registered nurses             & 47  & 249 & $+202$ & Yes \\
+Electricians                  & 95  & 398 & $+303$ & Yes \\
+Aircraft pilots               & 402 & 507 & $+105$ & Yes \\
+Hairdressers/cosmetologists   & 8   & 118 & $+110$ & Yes \\
+Farmers/ranchers              & 384 & 443 & $+59$  & Partial \\
+Mechanical engineers          & 404 & 447 & $+43$  & Partial \\
+Teaching assistants            & 13  & 48  & $+35$  & No \\
+Secondary school teachers     & 1   & 16  & $+15$  & Yes \\
+Software developers           & 306 & 268 & $-38$  & No \\
+Aerospace engineers           & 495 & 500 & $+5$   & No \\
+Petroleum engineers           & 521 & 521 & $0$    & No \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{0.5em}
+\footnotesize \textit{Notes:} $\Delta$ Rank = LASSO rank $-$ Factor rank. Positive values indicate the occupation is rated more portable under factor analysis. ``Licensed?'' is based on common regulatory requirements for these occupations. The two indices agree almost perfectly at the extremes (petroleum engineers: rank 521 in both) but diverge sharply for credentialed occupations.
+\end{minipage}
+\end{table}
+
+Figure \ref{fig:rank_scatter} plots factor-analysis ranks against LASSO ranks for all 525 occupations, with points colored by occupational licensing share. Occupations above the 45-degree line are rated more portable under factor analysis than LASSO. The licensed occupations (red-shaded points) systematically appear above the line, visualizing the licensing friction gap.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig_rank_scatter.pdf}
+\caption{Factor analysis vs.\ LASSO portability ranks ($N = 525$). Points above the 45-degree line are rated more portable under factor analysis. Color indicates licensing share (red = licensed). Licensed occupations (nurses, electricians, pilots) systematically diverge above the line, consistent with licensing frictions suppressing observed mobility.}
+\label{fig:rank_scatter}
+\end{figure}
+
+The largest movers are registered nurses (+202 ranks) and electricians (+303 ranks). Under factor analysis, these occupations' broad latent-skill profiles (interpersonal, analytical, and physical dimensions that overlap with many large destinations) are recognized as structurally transferable. Under LASSO, they are penalized because observed switching in the CPS is suppressed by licensing and credentialing barriers.
+
+The interpretation is that factor analysis captures \emph{structural portability}, the latent skill overlap that could support transitions absent institutional barriers, while LASSO captures \emph{revealed portability}, the skill dimensions that predict transitions that actually occur. The divergence maps onto licensing frictions \citep{kleiner2013}: nurses, electricians, hairdressers, and pilots are all subject to state-level licensing requirements that raise the cost of occupational entry, suppressing observed switching despite underlying skill compatibility.
+
+Software developers are one of the few occupations that score higher under LASSO than factor analysis ($-38$ ranks). This may reflect that the specific dimensions LASSO selects (technical problem-solving, data analysis) are shared with many large destination occupations, even though the four-factor latent representation places software developers in a more specialized cluster.
+
+%-----------------------------------------------------------------------------
+\subsection{Long-Term Unemployment Validation}
+\label{sec:results_ltu}
+%-----------------------------------------------------------------------------
+
+Table \ref{tab:ltu} reports results from Equation (\ref{eq:ltu}) and its extensions.
+
+\begin{table}[H]
+\centering
+\caption{Portability and Long-Term Unemployment}
+\label{tab:ltu}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Model} & \textbf{Variable} & \textbf{Coef.} & \textbf{SE} & \textbf{$p$} & \textbf{$R^2$} \\
+\midrule
+\multirow{2}{*}{1. Baseline (free $\delta_1$)} & EmpTrend$_z$ & $+0.0004$ & 0.0011 & 0.702 & \multirow{2}{*}{0.003} \\
+ & Portability$_z$ & $-0.0002$ & 0.0002 & 0.288 & \\
+\midrule
+\multirow{2}{*}{2. Full (fixed $\delta_1$)} & EmpTrend$_z$ & $+0.0004$ & 0.0010 & 0.700 & \multirow{2}{*}{0.020} \\
+ & Portability$_z$ & $\mathbf{-0.0011}$ & 0.0004 & $\mathbf{0.008}$ & \\
+\midrule
+3. Portability only & Portability$_z$ & $-0.0011$ & 0.0004 & 0.008 & 0.018 \\
+\midrule
+\multirow{3}{*}{4. AI additive} & EmpTrend$_z$ & $+0.0003$ & 0.0010 & 0.755 & \multirow{3}{*}{0.026} \\
+ & Portability$_z$ & $\mathbf{-0.0009}$ & 0.0004 & $\mathbf{0.035}$ & \\
+ & AI$_z$ & $-0.0006$ & 0.0004 & 0.078 & \\
+\midrule
+\multirow{4}{*}{5. AI interaction} & EmpTrend$_z$ & $+0.0003$ & 0.0010 & 0.740 & \multirow{4}{*}{0.027} \\
+ & Portability$_z$ & $-0.0009$ & 0.0004 & 0.036 & \\
+ & AI$_z$ & $-0.0007$ & 0.0004 & 0.062 & \\
+ & Port.$\times$AI & $-0.0002$ & 0.0005 & 0.705 & \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{0.5em}
+\footnotesize \textit{Notes:} $N = 524$ occupations. LTU is the share of unemployed workers (last occupation $= o$) with $\geq$26 weeks of unemployment. All continuous regressors are z-scored. Model 1 uses the free-$\delta_1$ portability measure. Models 2--5 use the fixed-$\delta_1$ (Option C) portability index. 95\% CI for $\hat{\alpha}_2$ in Model 2: $[-0.0019, -0.0003]$.
+\end{minipage}
+\end{table}
+
+Figure \ref{fig:portability_ltu} presents the partial regression plot corresponding to Model 2, with both portability and LTU residualized on the employment trend. The negative slope ($\hat{\alpha}_2 = -0.0011$, $p = 0.008$) is visually apparent despite substantial noise, and notable occupations are labeled for reference.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig_portability_ltu.pdf}
+\caption{Portability and long-term unemployment ($N = 524$). Both axes are residualized on the employment trend control. The fitted line shows $\hat{\alpha}_2 = -0.0011$ ($p = 0.008$): more portable occupations have lower LTU shares. Selected occupations are labeled.}
+\label{fig:portability_ltu}
+\end{figure}
+
+The key result is the transition from Model 1 to Model 2. Under the free-$\delta_1$ portability measure, the coefficient on portability is negative but small and insignificant ($\hat{\alpha}_2 = -0.0002$, $p = 0.288$, $R^2 = 0.003$). Under the fixed-$\delta_1$ index, the coefficient strengthens to $-0.0011$ and becomes significant at $p = 0.008$, with the entire 95\% confidence interval below zero ($[-0.0019, -0.0003]$). A one-standard-deviation increase in portability is associated with a 0.11 percentage point lower LTU share. The direction is consistent with theory, and the magnitude increase from Model 1 to Model 2 underscores the importance of stripping origin-size contamination: the free-$\delta_1$ measure conflates structural skill transferability with origin size, attenuating the portability--LTU signal.
+
+However, the overall explanatory power is low ($R^2 = 0.02$), and the occupation-level LTU shares are measured with considerable noise: the median occupation has only 2 long-term unemployed persons in the CPS ASEC sample, and 153 of 525 occupations have zero. The result should be interpreted as suggestive evidence of a portability--LTU relationship, not as a precise estimate of its magnitude.
+
+%-----------------------------------------------------------------------------
+\subsection{AI Exposure Results}
+\label{sec:results_ai}
+%-----------------------------------------------------------------------------
+
+Models 4 and 5 in Table \ref{tab:ltu} add AI exposure from \citet{eloundou2023}. Three findings emerge:
+
+\begin{enumerate}
+    \item \textbf{Portability survives conditioning on AI exposure.} In Model 4, portability remains significant at $p = 0.035$ ($\hat{\alpha}_2 = -0.0009$). The coefficient attenuates slightly from the baseline ($-0.0011$ to $-0.0009$) but remains economically and statistically meaningful. The portability--LTU relationship is not confounded by AI exposure differences across occupations.
+
+    \item \textbf{AI exposure is marginally significant with a negative sign.} Higher AI-exposed occupations have \emph{lower} LTU ($\hat{\alpha}_3 = -0.0006$, $p = 0.078$). This is counterintuitive if one expects AI-exposed occupations to suffer displacement, but consistent with AI-exposed jobs being disproportionately white-collar, cognitive occupations with structurally low baseline unemployment.
+
+    \item \textbf{The interaction term is null.} In Model 5, the portability $\times$ AI interaction is insignificant ($p = 0.705$), meaning portability's effect on LTU does not vary by AI exposure level. The hypothesis that ``portability buffers AI displacement'' is not supported. Subsample splits by median AI exposure (not shown) confirm this: portability coefficients are similar in magnitude ($\sim$$-0.0008$) but insignificant in both halves ($p = 0.177$ and $p = 0.159$), likely reflecting a power issue with only 262 observations per subsample.
+\end{enumerate}
+
+The bottom line for interpretation: portability and AI exposure operate through independent channels. Higher portability predicts lower LTU regardless of AI exposure level.
+
+%=============================================================================
+\section{Discussion}
+\label{sec:discussion}
+%=============================================================================
+
+%-----------------------------------------------------------------------------
+\subsection{Why Do Some High-Skilled Occupations Score Low?}
+%-----------------------------------------------------------------------------
+
+The portability index reflects \emph{breadth} of outside options weighted by destination size, not the \emph{quality} of human capital. Occupations like aerospace engineering and petroleum engineering score low because their skill profiles overlap primarily with small, specialized destination sectors. The employment-share weighting in Equation (\ref{eq:portrate}) penalizes narrow-but-high-value destinations: being structurally close to 10 small engineering niches counts less than being close to one large service sector.
+
+This connects to \citeauthor{lazear2009}'s (\citeyear{lazear2009}) theory of skill specificity. In Lazear's framework, occupations that combine skills in rare proportions are ``specific'' not because their component skills are unusual, but because the particular combination is. An aerospace engineer may have high levels of mathematics, physics, and project management, all individually common, but the specific blend is rare, making the occupation's skill \emph{bundle} non-portable even though each component skill is individually transferable. The portability index captures this distinction: it measures bundle transferability, not component-skill value.
+
+%-----------------------------------------------------------------------------
+\subsection{Revealed Portability and Voluntary Immobility}
+%-----------------------------------------------------------------------------
+
+The Lazear explanation above concerns occupations whose skill bundles are genuinely narrow. But revealed portability also understates transferability for a second, distinct reason: workers in well-compensated occupations may \emph{choose} not to switch, even when their skills would transfer. Software developers, for instance, move from rank 519 under the free-$\delta_1$ measure to rank 268 under the fixed-$\delta_1$ index---a large improvement, but still near the median, despite a skill profile (analytical reasoning, technical problem-solving, project management) that overlaps with hundreds of destination occupations. The likely explanation is that high wages, equity compensation, and favorable working conditions suppress voluntary mobility: the outside options exist, but exercising them entails a compensation loss that few workers accept absent a layoff.
+
+This creates a ``golden handcuffs'' problem for revealed-preference measurement. The LASSO model learns which skill dimensions predict \emph{observed} transitions, and observed transitions are a joint product of skill compatibility \emph{and} the worker's willingness to move. When an occupation's incumbents rarely leave voluntarily, the model infers low portability regardless of the underlying skill overlap. The result is that the index conflates two very different situations: an occupation with no viable outside options (petroleum engineers, marine engineers) and an occupation with many viable options that workers decline to exercise (software developers, management consultants, financial analysts). Both appear low-portability in the revealed measure, but their workers face very different risks if involuntarily displaced.
+
+The fixed-$\delta_1$ specification partially addresses this by stripping origin-size contamination, which mechanically depresses per-capita portability for small, high-retention occupations. But it does not fully resolve the voluntary immobility bias, because the LASSO coefficients themselves are estimated from a sample in which high-compensation occupations contribute few switching observations. In principle, the factor-analysis index should be immune to this bias, since it measures latent skill overlap without reference to observed flows. The fact that software developers score \emph{lower} under factor analysis than under LASSO ($-38$ ranks; Table \ref{tab:fa_vs_lasso}) suggests that for this occupation, the issue is not suppressed mobility but rather a genuinely distinctive skill profile in the latent factor space. For other high-compensation occupations where the two indices converge, the golden handcuffs channel may be quantitatively small relative to the skill-bundle explanation. Disentangling voluntary immobility from genuine skill narrowness would require displacement-driven switching data---such as the Displaced Worker Survey---where the decision to leave is exogenous to compensation.
+
+%-----------------------------------------------------------------------------
+\subsection{Licensing Frictions as a Key Finding}
+%-----------------------------------------------------------------------------
+
+The comparison of factor-analysis and LASSO indices is arguably the paper's most novel finding. The two measures agree at the extremes (petroleum engineers score identically at rank 521/521, and general clerical occupations dominate both tops) but diverge dramatically in the middle, precisely where institutional barriers are most binding.
+
+Factor analysis measures \emph{structural portability}: the latent skill overlap between occupations, computed from the full 202-dimensional O*NET profile compressed into four factors. It answers the question ``how similar are these occupations' skill requirements?'' without reference to whether workers actually transition between them. LASSO measures \emph{revealed portability}: the skill dimensions that predict observed transitions in the CPS data. It answers the question ``which skill differences predict who actually switches?''
+
+The divergence for licensed occupations (nurses +202 ranks, electricians +303 ranks, hairdressers +110 ranks, pilots +105 ranks) is interpretable as the \emph{licensing friction gap}. These occupations have broad skill profiles that should, in principle, support transitions to many destinations. But state-level licensing requirements raise the cost of entry, suppressing the observed switching that LASSO uses as its training signal. Factor analysis, by contrast, sees only the latent skill structure and rates these occupations as highly portable.
+
+This finding connects to the licensing literature \citep{kleiner2013}: occupational licensing affects approximately 25\% of U.S.\ workers, and licensing requirements are a binding constraint on labor mobility for many middle-skill occupations. The comparison of factor-analysis and LASSO indices provides a new way to quantify the \emph{mobility suppression} effect of licensing, not by comparing licensed vs.\ unlicensed workers directly, but by comparing two portability measures that differ only in whether they condition on observed switching.
+
+%-----------------------------------------------------------------------------
+\subsection{AI Displacement and the Timeliness of Portability Measurement}
+%-----------------------------------------------------------------------------
+
+Emerging evidence on AI's labor market effects underscores why occupation-level portability measures are needed now, before displacement becomes visible in aggregate data. \citet{massenkoff2026} introduce an ``observed exposure'' measure that combines theoretical LLM task capability \citep{eloundou2023} with actual usage data from Claude, weighting automated and work-related use cases more heavily. Their measure shows that AI penetration remains a fraction of what is theoretically feasible---computer programmers are 75\% covered, but most occupations remain below 30\%---and that aggregate unemployment has not yet increased differentially for exposed workers. However, they find suggestive evidence that hiring of young workers (ages 22--25) has slowed in the most exposed occupations, consistent with displacement effects emerging at the entry margin before showing up in separation-based unemployment statistics.
+
+This pattern creates a natural role for the portability index. Observed exposure identifies \emph{which} occupations face displacement pressure; portability identifies \emph{where} displaced workers can realistically transition. The two measures provide non-redundant information: in our LTU regressions (Table \ref{tab:ltu}), portability remains significant after conditioning on AI exposure, and the interaction is null, confirming that they operate through independent channels. Workers in occupations that are both highly AI-exposed and low-portability---specialized white-collar roles with narrow skill bundles---face a compounding risk that neither measure alone captures.
+
+The demographic profile of exposed workers reinforces this concern. \citet{massenkoff2026} find that the most AI-exposed occupations are disproportionately higher-paid, more educated, and more likely to employ women---a population that has historically experienced lower unemployment. If displacement materializes in these occupations, the affected workers will need to identify viable outside options quickly. A portability index that maps the full set of feasible transitions, weighted by destination size and skill compatibility, provides exactly the kind of forward-looking information that workforce development programs and career counseling services would need.
+
+%-----------------------------------------------------------------------------
+\subsection{Limitations}
+%-----------------------------------------------------------------------------
+
+Several limitations warrant discussion.
+
+\paragraph{CPS occupation coding error.} The 12.5\% individual-level switching rate is roughly double the 5\% benchmark established by careful longitudinal studies \citep{kambourov2008}. Much of the excess likely reflects coding error: respondents describe their occupations differently in consecutive surveys, generating spurious switches. This measurement error adds noise to the dependent variable and attenuates the signal from skill distance, making our estimates conservative. However, if coding error is systematically related to skill distance (e.g., similar occupations are more likely to be miscoded as each other), the estimates could be biased toward finding an effect.
+
+\paragraph{Single time window.} The switching data span 2020--2025, a period that includes the COVID-19 pandemic, the ``great resignation,'' and subsequent labor market tightening. Year fixed effects confirm that the baseline patterns are stable within this window, but the model is estimated on a single historical period and may not generalize to other macroeconomic environments.
+
+\paragraph{Descriptive, not causal.} The LTU regression (Equation \ref{eq:ltu}) is a cross-sectional correlation between an occupation-level portability index and an occupation-level LTU share. There is no quasi-experimental variation or instrumental variable; the employment trend control absorbs some confounds but cannot establish causality. The result should be interpreted as ``occupations with more portable skill profiles tend to have lower LTU,'' not ``making skills more portable would reduce LTU.''
+
+\paragraph{ACS 2021 vs.\ specification's 2023.} The geographic distance matrix uses ACS 2021 instead of the specified 2023 reference year, due to the PUMA vintage incompatibility described in Section \ref{sec:data_geo}. Geographic employment distributions evolve slowly, but this deviation introduces a two-year lag.
+
+\paragraph{No out-of-sample validation.} The portability index is constructed from the full 2020--2025 sample. A train-test temporal split (e.g., train on 2020--2024, validate on 2025) would provide a stronger test of the index's predictive validity but is not yet implemented.
+
+\paragraph{O*NET endogeneity.} The O*NET skill descriptors are treated as exogenous occupation characteristics, but they are themselves constructed from surveys of workers and occupational analysts and are periodically updated to reflect the evolving content of work. If O*NET profiles are influenced by the composition of workers currently employed in an occupation (rather than purely reflecting inherent job requirements), the skill vectors may partially encode realized labor market outcomes. In the extreme, occupations that experience frequent inflows from diverse origins could have their O*NET profiles updated to reflect a broader skill mix, creating a mechanical correlation between skill similarity and observed switching. This concern is mitigated by the fact that O*NET updates are infrequent relative to the CPS switching window and are based on job analyst ratings rather than worker flow data, but it cannot be ruled out entirely.
+
+\paragraph{Untapped O*NET dimensions.} The current pipeline uses 202 numeric dimensions from four O*NET descriptor files. O*NET also contains 18,796 free-text task statements, 2,087 Detailed Work Activities (DWAs), and 332 Intermediate Work Activities (IWAs) that could provide complementary measures of occupational similarity, particularly for distinguishing occupations that share the same broad skill levels but differ in what workers actually \emph{do}.
+
+%=============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+%=============================================================================
+
+This paper develops a methodology for constructing occupation-level skill portability indices and applies it to 525 U.S.\ occupations. The primary contribution is methodological: a gravity model framework that lets observed switching behavior endogenously reveal which of 202 O*NET skill dimensions constrain occupational mobility. LASSO-selected skill distances predict bilateral switching flows substantially better than traditional metrics that weight all dimensions equally (pseudo-$R^2 = 0.478$ vs.\ best direct metric $R^2 = 0.421$), and the fixed-exposure aggregation strips origin-size contamination that otherwise dominates the index rankings.
+
+Two substantive findings emerge from the index. First, the fixed-exposure portability index is negatively associated with long-term unemployment across occupations ($p = 0.008$), providing directionally supportive evidence, though the effect is small in magnitude ($R^2 = 0.02$) and the occupation-level LTU measures are noisy due to small CPS cell sizes. This association survives conditioning on AI exposure, suggesting that skill transferability and technology exposure operate through independent channels. Second, comparing the LASSO-based (revealed) and factor-analysis-based (structural) indices reveals a systematic divergence for licensed occupations. Registered nurses, electricians, and hairdressers are rated far more portable under factor analysis than under LASSO, consistent with licensing frictions suppressing observed mobility despite underlying skill compatibility.
+
+The policy implication is that portability indices based on revealed switching behavior systematically understate the transferability of credentialed occupations. A nurse or electrician whose licensing requirements prevent them from switching, despite having skills that would transfer, appears ``non-portable'' in revealed-preference measures, potentially misleading workforce development programs that use such measures to identify at-risk workers. Constructing both revealed and structural indices, as this paper does, provides a more complete picture of where institutional frictions bind.
+
+Several directions for future work follow directly. First, the LTU validation would benefit substantially from larger samples. Pooling monthly CPS files rather than the ASEC supplement alone would increase the unemployment sample roughly tenfold, reducing the measurement noise that currently limits the precision of the portability--LTU relationship. The Displaced Worker Survey, which directly tracks reemployment outcomes after job loss, would provide an even more targeted test. Second, validating the factor-vs.-LASSO divergence against direct licensing data \citep{kleiner2013} would test whether the rank gaps correlate with measured regulatory stringency. Third, bootstrap confidence intervals on the rank index would quantify uncertainty in the ordinal rankings. Fourth, extending the measure to incorporate \emph{wage-preserving} portability, whether outside options are not just accessible but economically viable, would address the distinction between having many options and having good ones. Finally, cluster-aware index construction that accounts for the correlation structure of destination occupations would address the implicit assumption that each destination contributes independently to portability.
+
+%=============================================================================
+% Bibliography
+%=============================================================================
+
+\begin{thebibliography}{99}
+
+\bibitem[Acemoglu \& Autor(2011)]{acemoglu2011}
+Acemoglu, D., \& Autor, D. (2011).
+Skills, tasks and technologies: Implications for employment and earnings.
+In \textit{Handbook of Labor Economics} (Vol.\ 4B, pp.\ 1043--1171). Elsevier.
+
+\bibitem[Autor et al.(2003)]{autor2003}
+Autor, D. H., Levy, F., \& Murnane, R. J. (2003).
+The skill content of recent technological change: An empirical exploration.
+\textit{Quarterly Journal of Economics}, 118(4), 1279--1333.
+
+\bibitem[Autor et al.(2013)]{autor2013}
+Autor, D. H., Dorn, D., \& Hanson, G. H. (2013).
+The China syndrome: Local labor market effects of import competition in the United States.
+\textit{American Economic Review}, 103(6), 2121--2168.
+
+\bibitem[Becker(1964)]{becker1964}
+Becker, G. S. (1964).
+\textit{Human Capital: A Theoretical and Empirical Analysis, with Special Reference to Education}.
+University of Chicago Press.
+
+\bibitem[Cameron et al.(2011)]{cameron2011}
+Cameron, A. C., Gelbach, J. B., \& Miller, D. L. (2011).
+Robust inference with multiway clustering.
+\textit{Journal of Business \& Economic Statistics}, 29(2), 238--249.
+
+\bibitem[Cortes \& Gallipoli(2018)]{cortes2018}
+Cortes, G. M., \& Gallipoli, G. (2018).
+The costs of occupational mobility: An aggregate analysis.
+\textit{Journal of the European Economic Association}, 16(2), 275--315.
+
+\bibitem[Dorn(2009)]{dorn2009}
+Dorn, D. (2009).
+\textit{Essays on inequality, spatial interaction, and the demand for skills}.
+Doctoral dissertation, University of St.\ Gallen.
+
+\bibitem[Eloundou et al.(2023)]{eloundou2023}
+Eloundou, T., Manning, S., Mishkin, P., \& Rock, D. (2023).
+GPTs are GPTs: An early look at the labor market impact potential of large language models.
+\textit{arXiv preprint arXiv:2303.10130}.
+
+\bibitem[Gathmann \& Sch\"{o}nberg(2010)]{gathmann2010}
+Gathmann, C., \& Sch\"{o}nberg, U. (2010).
+How general is human capital? A task-based approach.
+\textit{Journal of Labor Economics}, 28(1), 1--49.
+
+\bibitem[Johnson \& Kleiner(2020)]{johnson2020}
+Johnson, J. E., \& Kleiner, M. M. (2020).
+Is occupational licensing a barrier to interstate migration?
+\textit{American Economic Journal: Economic Policy}, 12(3), 347--373.
+
+\bibitem[Kambourov \& Manovskii(2008)]{kambourov2008}
+Kambourov, G., \& Manovskii, I. (2008).
+Rising occupational and industry mobility in the United States: 1968--97.
+\textit{International Economic Review}, 49(1), 41--79.
+
+\bibitem[Kleiner \& Krueger(2013)]{kleiner2013}
+Kleiner, M. M., \& Krueger, A. B. (2013).
+Analyzing the extent and influence of occupational licensing on the labor market.
+\textit{Journal of Labor Economics}, 31(S1), S173--S202.
+
+\bibitem[Lazear(2009)]{lazear2009}
+Lazear, E. P. (2009).
+Firm-specific human capital: A skill-weights approach.
+\textit{Journal of Political Economy}, 117(5), 914--940.
+
+\bibitem[Massenkoff \& McCrory(2026)]{massenkoff2026}
+Massenkoff, M., \& McCrory, P. (2026).
+Labor market impacts of AI: A new measure and early evidence.
+Anthropic Research Report.
+
+\bibitem[Macaluso(2023)]{macaluso2023}
+Macaluso, C. (2023).
+Skill remoteness and post-layoff labor market outcomes.
+Working Paper.
+
+\bibitem[Neffke \& Henning(2013)]{neffke2013}
+Neffke, F., \& Henning, M. (2013).
+Skill-relatedness and firm diversification.
+\textit{Strategic Management Journal}, 34(3), 297--316.
+
+\bibitem[Poletaev \& Robinson(2008)]{poletaev2008}
+Poletaev, M., \& Robinson, C. (2008).
+Human capital specificity: Evidence from the Dictionary of Occupational Titles and Displaced Worker Surveys, 1984--2000.
+\textit{Journal of Labor Economics}, 26(3), 387--420.
+
+\bibitem[Santos Silva \& Tenreyro(2006)]{santos2006}
+Santos Silva, J. M. C., \& Tenreyro, S. (2006).
+The log of gravity.
+\textit{Review of Economics and Statistics}, 88(4), 641--658.
+
+\bibitem[Tolbert \& Sizer(1996)]{tolbert1996}
+Tolbert, C. M., \& Sizer, M. (1996).
+U.S.\ commuting zones and labor market areas: A 1990 update.
+Economic Research Service Staff Paper No.\ 9614.
+
+\end{thebibliography}
+
+\end{document}
